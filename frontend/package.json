@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "svelte-check --tsconfig ./tsconfig.json --threshold error && vite build",
     "preview": "vite preview --port 22830",
-    "check": "svelte-check --tsconfig ./tsconfig.json --threshold error"
+    "check": "svelte-check --tsconfig ./tsconfig.json --threshold error",
+    "test:warranty": "esbuild scripts/test-warranty.ts --bundle --platform=node --format=esm '--alias:$lib=./src/lib' --outfile=node_modules/.cache/test-warranty.mjs && node node_modules/.cache/test-warranty.mjs"
   },
   "dependencies": {
     "dexie": "^4.0.11",

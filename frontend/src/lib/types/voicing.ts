@@ -22,6 +22,10 @@ export interface Voicing {
   operator: string;
   /** 状态 */
   state: VoicingState;
+  /** 行来源：手工登记 / 厂家保修回执对账生成 */
+  source?: 'manual' | 'warranty';
+  /** 来源为厂家回执时的对账批次 id（溯源用） */
+  warrantyBatchId?: string;
 }
 
 export const VOICING_TYPES: VoicingType[] = ['整音', '换弦', '击弦机调整', '踏板调整'];

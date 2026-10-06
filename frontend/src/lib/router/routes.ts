@@ -9,6 +9,7 @@ import TuningsPage from '../../routes/tunings/+page.svelte';
 import VoicingsPage from '../../routes/voicings/+page.svelte';
 import EnvironmentsPage from '../../routes/environments/+page.svelte';
 import RemindersPage from '../../routes/reminders/+page.svelte';
+import WarrantyPage from '../../routes/warranty/+page.svelte';
 import NotFound from '../../routes/NotFound.svelte';
 
 export const routes: Record<string, Component> = {
@@ -18,6 +19,7 @@ export const routes: Record<string, Component> = {
   [ROUTES.voicings]: VoicingsPage,
   [ROUTES.environments]: EnvironmentsPage,
   [ROUTES.reminders]: RemindersPage,
+  [ROUTES.warranty]: WarrantyPage,
   '*': NotFound
 };
 

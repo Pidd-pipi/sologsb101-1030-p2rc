@@ -188,6 +188,19 @@
             <div>序列号：{piano.serialNo || '—'} · 购入 {piano.purchaseYear} 年</div>
           </div>
 
+          {#if piano.warrantyConclusion}
+            <div class="rounded-lg bg-sky-50 px-2.5 py-1.5 text-xs leading-5 text-sky-800">
+              <div class="flex items-center gap-1 font-semibold">
+                <span aria-hidden="true">🛡</span>
+                <span>厂家鉴定{piano.warrantyDate ? `（${piano.warrantyDate}）` : ''}</span>
+              </div>
+              <div>{piano.warrantyConclusion}</div>
+              {#if piano.warrantySuggestedParts}
+                <div class="mt-0.5 text-sky-700">建议更换部件：{piano.warrantySuggestedParts}</div>
+              {/if}
+            </div>
+          {/if}
+
           <div class="flex flex-wrap items-center gap-2">
             <span class="muted">最近调律 {summary.lastTuningDate}</span>
             {#if summary.tuningCount > 0}

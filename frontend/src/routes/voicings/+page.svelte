@@ -237,6 +237,9 @@
                       ? 'bg-emerald-100 text-emerald-700'
                       : 'bg-amber-100 text-amber-700'}">{voicing.state}</span
                   >
+                  {#if voicing.source === 'warranty'}
+                    <span class="ml-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-700" title="厂家保修鉴定回执对账生成">厂家建议</span>
+                  {/if}
                 </td>
                 <td class="py-2">
                   {#if voicing.state === '计划'}

@@ -72,6 +72,7 @@ npm run check      # 仅做类型检查
 | `/voicings` | 整音与维修 | Voicing、Piano | 登记毡槌/击弦机/换弦/踏板事项、按钢琴汇总维修履历、切换计划/已完成（完成回写钢琴状态） |
 | `/environments` | 琴房温湿度记录 | Environment、Piano | 按日期录入温湿度、**超出建议区间（18–26 ℃ / 40–60 %）自动判定并用 Tailwind 高亮超标行**、超标天数统计 |
 | `/reminders` | 调律周期提醒与导出 | Reminder 及全部模型 | 由周期与上次调律日期推算下次建议日期、**超期琴置顶**、按场所批量筛选、单琴档案与整库 JSON 导出导入 |
+| `/warranty` | 厂家保修鉴定回执对账 | Warranty、Piano、Tuning、Voicing、Reminder | 导入厂家回执 JSON，**按序列号认琴**，鉴定结论与厂家建议更换部件写回档案，建议部件**顺手生成维修计划**；调律日期 / 维修条目对不上时**两边原值都留**并列差异等人确认（可一键采纳回执条目）；档案更新后自动重算维修状态与下次建议日期，导入失败整体回滚 |
 
 ---
 
@@ -92,22 +93,25 @@ sologsb101-1030/
     ├── public/favicon.svg
     └── src/
         ├── main.ts  App.svelte  app.css  vite-env.d.ts
-        ├── lib/types/              # piano.ts tuning.ts voicing.ts environment.ts reminder.ts filter.ts
-        ├── lib/stores/             # pianoStore tuningStore voicingStore environmentStore reminderStore
+        ├── lib/types/              # piano.ts tuning.ts voicing.ts environment.ts reminder.ts filter.ts warranty.ts
+        ├── lib/stores/             # pianoStore tuningStore voicingStore environmentStore reminderStore warrantyStore
         ├── lib/components/common/  # CentsTag.svelte FilterBar.svelte StatBadge.svelte EmptyPanel.svelte
+        ├── lib/components/warranty/ # WarrantyImportPanel / WarrantyDiffList / WarrantyBatchHistory
         ├── lib/hooks/              # useCentsDeviation.ts useIdbTable.ts
-        ├── lib/utils/              # cents.ts db.ts export.ts seed.ts uuid.ts query.ts
+        ├── lib/utils/              # cents.ts db.ts export.ts seed.ts uuid.ts query.ts warrantyReceipt.ts warrantyReconcile.ts
         ├── lib/router/index.ts     # 路由表与导航配置
-        └── routes/                 # pianos/ tunings/ voicings/ environments/ reminders/ 各一个 +page.svelte
+        ├── scripts/                # test-warranty.ts 回执对账纯函数测试（npm run test:warranty）
+        └── routes/                 # pianos/ tunings/ voicings/ environments/ reminders/ warranty/ 各一个 +page.svelte
 ```
 
 ---
 
 ## 六、数据存储说明
 
-- **IndexedDB 库名**：`gbpianotune-db`（Dexie 封装），结构版本号 `version(1)`，并带 `upgrade()` 迁移逻辑（为历史行补齐行修订号与时间戳）。
-- **分表存储**：`pianos` 钢琴、`tunings` 调律、`voicings` 整音维修、`environments` 琴房环境、`reminders` 周期提醒，共 5 张表；每行带 `revision` / `createdAt` / `updatedAt`。
+- **IndexedDB 库名**：`gbpianotune-db`，当前结构版本号 `version(2)`（v1 为五张业务表并带 `upgrade()` 历史行修订迁移；v2 保留 v1 全部结构并新增厂家回执对账的批次表与差异表，鉴定结论等字段为可选，老数据无需回填）。
+- **分表存储**：`pianos` 钢琴、`tunings` 调律、`voicings` 整音维修（回执生成的计划带来源标记）、`environments` 琴房环境、`reminders` 周期提醒、`warrantyBatches` 回执对账批次、`warrantyDiffs` 对账差异，共 7 张表；每行带 `revision` / `createdAt` / `updatedAt`。
 - **首屏自动播种**：`lib/utils/db.ts` 的 `initDatabase()` 在 `pianos` 表为空时调用 `seedDatabase()`，灌入互相引用的三层演示数据（钢琴 → 调律记录 → 维修 / 环境 → 提醒），其中包含 1 台超期琴与 2 条异常环境记录，保证 5 个页面首次打开都有内容；播种幂等，清空后重进会重新播种。
 - **音分换算**：`lib/utils/cents.ts` 提供 `cents = 1200 × log2(f / f0)` 与反算、与标准音 A4 = 440 Hz 的比对、偏差分档（±5 / ±10 / ±20 / ±20 以上）与配色映射。
 - **无后端**：没有 API 服务、没有数据库容器；容器本身无状态，不挂载任何卷。
-- **级联规则**：删除钢琴会级联删除其调律、维修、环境与提醒记录。
+- **级联规则**：删除钢琴会级联删除其调律、维修、环境、提醒记录与对账差异。
+- **厂家回执对账**（`/warranty`）：回执 JSON 先经 `warrantyReceipt.ts` 校验，再由 `warrantyReconcile.ts` 纯函数完成「序列号认琴 → 调律 / 维修双向比对 → 建议部件映射维修计划」，最后在 `db.ts` 的**单个 Dexie 读写事务**内写回档案、生成计划、登记差异并重算钢琴状态与下次建议日期；解析或落库任一步失败都整体回滚，本地恢复成对账前的样子。
