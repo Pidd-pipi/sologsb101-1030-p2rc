@@ -92,7 +92,12 @@
       type: piano.type,
       venue: piano.venue,
       purchaseYear: piano.purchaseYear,
-      state: piano.state
+      state: piano.state,
+      warrantyConclusion: piano.warrantyConclusion,
+      warrantyConclusionRaw: piano.warrantyConclusionRaw,
+      warrantyAdvisedParts: piano.warrantyAdvisedParts,
+      warrantyCheckedDate: piano.warrantyCheckedDate,
+      warrantyReportNo: piano.warrantyReportNo
     };
     formError = null;
     dialogOpen = true;
@@ -186,6 +191,19 @@
           <div class="text-xs text-stone-500">
             <div>类型：{piano.type} · 场所：{piano.venue}</div>
             <div>序列号：{piano.serialNo || '—'} · 购入 {piano.purchaseYear} 年</div>
+            {#if piano.warrantyConclusion || piano.warrantyConclusionRaw}
+              <div class="mt-1">
+                {#if piano.warrantyConclusion}
+                  <span class="rounded-full bg-sky-100 px-2 py-0.5 text-sky-700">厂家鉴定：{piano.warrantyConclusion}</span>
+                {:else}
+                  <span class="rounded-full bg-rose-100 px-2 py-0.5 text-rose-700">结论待确认：{piano.warrantyConclusionRaw}</span>
+                {/if}
+                {#if piano.warrantyCheckedDate}<span class="ml-1 text-stone-400">{piano.warrantyCheckedDate}</span>{/if}
+              </div>
+              {#if piano.warrantyAdvisedParts}
+                <div class="mt-1 text-amber-700">建议更换：{piano.warrantyAdvisedParts}</div>
+              {/if}
+            {/if}
           </div>
 
           <div class="flex flex-wrap items-center gap-2">

@@ -12,9 +12,9 @@ function rev<T>(row: T): T & { revision: number; createdAt: number; updatedAt: n
 }
 
 const PIANOS: Array<Omit<PianoRow, 'revision' | 'createdAt' | 'updatedAt'>> = [
-  { id: 'pn-001', brand: 'YAMAHA', model: 'U1', serialNo: 'U1-6132457', type: '立式', venue: '琴房', purchaseYear: 2015, state: '正常' },
-  { id: 'pn-002', brand: 'STEINWAY', model: 'B-211', serialNo: 'B-598812', type: '三角', venue: '音乐厅', purchaseYear: 2008, state: '正常' },
-  { id: 'pn-003', brand: '珠江', model: 'UP118', serialNo: 'ZJ-1180621', type: '立式', venue: '家庭', purchaseYear: 2012, state: '待修' }
+  { id: 'pn-001', brand: 'YAMAHA', model: 'U1', serialNo: 'U1-6132457', type: '立式', venue: '琴房', purchaseYear: 2015, state: '正常', warrantyConclusion: null, warrantyConclusionRaw: '', warrantyAdvisedParts: '', warrantyCheckedDate: '', warrantyReportNo: '' },
+  { id: 'pn-002', brand: 'STEINWAY', model: 'B-211', serialNo: 'B-598812', type: '三角', venue: '音乐厅', purchaseYear: 2008, state: '正常', warrantyConclusion: null, warrantyConclusionRaw: '', warrantyAdvisedParts: '', warrantyCheckedDate: '', warrantyReportNo: '' },
+  { id: 'pn-003', brand: '珠江', model: 'UP118', serialNo: 'ZJ-1180621', type: '立式', venue: '家庭', purchaseYear: 2012, state: '待修', warrantyConclusion: null, warrantyConclusionRaw: '', warrantyAdvisedParts: '', warrantyCheckedDate: '', warrantyReportNo: '' }
 ];
 
 const TUNINGS: Array<Omit<TuningRow, 'revision' | 'createdAt' | 'updatedAt'>> = [

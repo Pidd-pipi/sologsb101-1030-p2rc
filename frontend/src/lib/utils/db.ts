@@ -10,6 +10,7 @@ import type { Tuning } from '$lib/types/tuning';
 import type { Voicing } from '$lib/types/voicing';
 import type { Environment } from '$lib/types/environment';
 import type { Reminder } from '$lib/types/reminder';
+import type { ReconcileReport } from '$lib/types/reconciliation';
 import { nowIso } from './uuid';
 import { seedDatabase } from './seed';
 
@@ -17,7 +18,7 @@ import { seedDatabase } from './seed';
 export const DB_NAME = 'gbpianotune-db';
 
 /** 当前数据结构版本号（每次调整字段结构必须 +1 并补迁移） */
-export const DB_SCHEMA_VERSION = 1;
+export const DB_SCHEMA_VERSION = 2;
 
 /** 行结构修订号 */
 export const ROW_REVISION = 1;
@@ -34,6 +35,7 @@ export type TuningRow = Tuning & Revisioned;
 export type VoicingRow = Voicing & Revisioned;
 export type EnvironmentRow = Environment & Revisioned;
 export type ReminderRow = Reminder & Revisioned;
+export type ReconciliationRow = ReconcileReport & Revisioned;
 
 class GbPianoTuneDatabase extends Dexie {
   pianos!: Table<PianoRow, string>;
@@ -41,17 +43,29 @@ class GbPianoTuneDatabase extends Dexie {
   voicings!: Table<VoicingRow, string>;
   environments!: Table<EnvironmentRow, string>;
   reminders!: Table<ReminderRow, string>;
+  reconciliations!: Table<ReconciliationRow, string>;
 
   constructor() {
     super(DB_NAME);
 
-    this.version(DB_SCHEMA_VERSION)
+    // v1：五张业务表（保留原始声明，老库按版本链逐级升级）
+    this.version(1).stores({
+      pianos: 'id, brand, model, serialNo, type, venue, state, updatedAt',
+      tunings: 'id, pianoId, date, technician, pitchRaised, updatedAt',
+      voicings: 'id, pianoId, type, parts, state, date, updatedAt',
+      environments: 'id, pianoId, date, device, abnormal, updatedAt',
+      reminders: 'id, pianoId, state, nextDueDate, updatedAt'
+    });
+
+    // v2：新增回执对账表；pianos 增加厂家保修鉴定字段（非索引，只补默认值）
+    this.version(2)
       .stores({
         pianos: 'id, brand, model, serialNo, type, venue, state, updatedAt',
         tunings: 'id, pianoId, date, technician, pitchRaised, updatedAt',
         voicings: 'id, pianoId, type, parts, state, date, updatedAt',
         environments: 'id, pianoId, date, device, abnormal, updatedAt',
-        reminders: 'id, pianoId, state, nextDueDate, updatedAt'
+        reminders: 'id, pianoId, state, nextDueDate, updatedAt',
+        reconciliations: 'id, receiptNo, importedAt'
       })
       .upgrade(async (tx) => {
         // 结构迁移：为历史行补齐行修订号与时间戳；新建库时各表为空，迁移天然幂等
@@ -66,6 +80,17 @@ class GbPianoTuneDatabase extends Dexie {
               if (typeof row.updatedAt !== 'number') row.updatedAt = row.createdAt;
             });
         }
+        // 为历史琴档补齐厂家保修鉴定字段
+        await tx
+          .table('pianos')
+          .toCollection()
+          .modify((row: Record<string, unknown>) => {
+            if (row.warrantyConclusion === undefined) row.warrantyConclusion = null;
+            if (typeof row.warrantyConclusionRaw !== 'string') row.warrantyConclusionRaw = '';
+            if (typeof row.warrantyAdvisedParts !== 'string') row.warrantyAdvisedParts = '';
+            if (typeof row.warrantyCheckedDate !== 'string') row.warrantyCheckedDate = '';
+            if (typeof row.warrantyReportNo !== 'string') row.warrantyReportNo = '';
+          });
       });
   }
 }
@@ -205,6 +230,25 @@ export async function removeReminder(id: string): Promise<void> {
   await db.reminders.delete(id);
 }
 
+/* ---------------------------- 保修回执对账 ---------------------------- */
+
+export async function listReconciliations(): Promise<ReconciliationRow[]> {
+  const rows = await db.reconciliations.toArray();
+  return rows.sort((a, b) => b.importedAt.localeCompare(a.importedAt));
+}
+
+export async function getReconciliation(id: string): Promise<ReconciliationRow | undefined> {
+  return db.reconciliations.get(id);
+}
+
+export async function putReconciliation(row: ReconciliationRow): Promise<void> {
+  await db.reconciliations.put(row);
+}
+
+export async function removeReconciliation(id: string): Promise<void> {
+  await db.reconciliations.delete(id);
+}
+
 /* --------------------------- 整库导入导出 --------------------------- */
 
 export interface DatabaseSnapshot {
@@ -216,6 +260,7 @@ export interface DatabaseSnapshot {
   voicings: Voicing[];
   environments: Environment[];
   reminders: Reminder[];
+  reconciliations: ReconcileReport[];
 }
 
 function stripRow<T extends Revisioned>(row: T): Omit<T, keyof Revisioned> {
@@ -227,12 +272,13 @@ function stripRow<T extends Revisioned>(row: T): Omit<T, keyof Revisioned> {
 }
 
 export async function exportSnapshot(): Promise<DatabaseSnapshot> {
-  const [pianos, tunings, voicings, environments, reminders] = await Promise.all([
+  const [pianos, tunings, voicings, environments, reminders, reconciliations] = await Promise.all([
     db.pianos.toArray(),
     db.tunings.toArray(),
     db.voicings.toArray(),
     db.environments.toArray(),
-    db.reminders.toArray()
+    db.reminders.toArray(),
+    db.reconciliations.toArray()
   ]);
   return {
     name: DB_NAME,
@@ -242,7 +288,8 @@ export async function exportSnapshot(): Promise<DatabaseSnapshot> {
     tunings: tunings.map(stripRow),
     voicings: voicings.map(stripRow),
     environments: environments.map(stripRow),
-    reminders: reminders.map(stripRow)
+    reminders: reminders.map(stripRow),
+    reconciliations: reconciliations.map(stripRow)
   };
 }
 
@@ -252,31 +299,35 @@ function stamp<T>(row: T): T & Revisioned {
 }
 
 export async function importSnapshot(snapshot: DatabaseSnapshot): Promise<void> {
-  await db.transaction('rw', [db.pianos, db.tunings, db.voicings, db.environments, db.reminders], async () => {
+  await db.transaction('rw', [db.pianos, db.tunings, db.voicings, db.environments, db.reminders, db.reconciliations], async () => {
     await Promise.all([
       db.pianos.clear(),
       db.tunings.clear(),
       db.voicings.clear(),
       db.environments.clear(),
-      db.reminders.clear()
+      db.reminders.clear(),
+      db.reconciliations.clear()
     ]);
     await db.pianos.bulkPut(snapshot.pianos.map(stamp));
     await db.tunings.bulkPut(snapshot.tunings.map(stamp));
     await db.voicings.bulkPut(snapshot.voicings.map(stamp));
     await db.environments.bulkPut(snapshot.environments.map(stamp));
     await db.reminders.bulkPut(snapshot.reminders.map(stamp));
+    // 兼容旧备份（没有 reconciliations 字段）
+    await db.reconciliations.bulkPut((snapshot.reconciliations ?? []).map(stamp));
   });
 }
 
 /** 清空全部数据并重新灌入演示数据 */
 export async function resetDatabase(): Promise<void> {
-  await db.transaction('rw', [db.pianos, db.tunings, db.voicings, db.environments, db.reminders], async () => {
+  await db.transaction('rw', [db.pianos, db.tunings, db.voicings, db.environments, db.reminders, db.reconciliations], async () => {
     await Promise.all([
       db.pianos.clear(),
       db.tunings.clear(),
       db.voicings.clear(),
       db.environments.clear(),
-      db.reminders.clear()
+      db.reminders.clear(),
+      db.reconciliations.clear()
     ]);
   });
   await seedDatabase();
@@ -284,12 +335,13 @@ export async function resetDatabase(): Promise<void> {
 
 /** 各表行数统计 */
 export async function countAll(): Promise<Record<string, number>> {
-  const [pianos, tunings, voicings, environments, reminders] = await Promise.all([
+  const [pianos, tunings, voicings, environments, reminders, reconciliations] = await Promise.all([
     db.pianos.count(),
     db.tunings.count(),
     db.voicings.count(),
     db.environments.count(),
-    db.reminders.count()
+    db.reminders.count(),
+    db.reconciliations.count()
   ]);
-  return { pianos, tunings, voicings, environments, reminders };
+  return { pianos, tunings, voicings, environments, reminders, reconciliations };
 }
